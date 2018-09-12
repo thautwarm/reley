@@ -1,0 +1,91 @@
+import std.common.[Space Name DoubleQuotedStr]
+ignore [Space]
+[python] import reley.expr_based_ast.[*]
+[python] import reley.helper.[*]
+[python] import functools.[*]
+[python] import rbnf.std.common.[recover_codes]
+
+num := R'0[Xx][\da-fA-F]+|\d+(?:\.\d+|)(?:E\-{0,1}\d+|)'
+
+to_const cast := 'type' 'def' 'fn' '->' '[|' '|]' 'return' 'if' 'else' 'let' 'or' 'and' 'not' 'xor' '..' '::' 'in' '<-' 'then' 'infix'
+
+identifier ::= name=Name | '(' ID=binOp ')' -> ID.name if ID else name.value
+
+defun ::= (mark='def' id=identifier | mark='fn') fn=defun_trailer
+           -> if id:
+                return DefFun(loc @ mark, id, fn.args, fn.body)
+              fn
+
+defun_trailer ::= (mark='(' args=arguments ')' | args=(mark=arg){1 1})
+                  ('->' body=expr |  body=defun_trailer)
+                  -> DefFun(loc @ mark, None, args or (), body)
+defty ::= mark='type' [id=identifier '='] ty=ty
+         -> DefTy(loc @ mark, id, ty)
+
+arguments ::= head=arg tail=(',' arg)* -> [head, *tail[1::2]]
+arg   ::= name=Name [':' ty=ty] -> Arg(loc @ name, name.value, ty)
+
+ty    ::= it=expr -> it
+
+infix ::= mark='infix' precedence=num '`' op=(~'`')+ '`'
+          -> Infix(loc @ mark, eval(precedence.value), recover_codes(op))
+
+stmt  ::= expr=expr [';'] -> expr
+
+_where  ::= name=Name '=' expr=expr -> Where(loc @ name, name.value, expr)
+
+expr ::=
+    | BIN=expr (binOp expr)+ as tail
+    | JUST=factor
+    ->  if BIN : return BinSeq(loc @ BIN, [BIN, *tail]) if tail else BIN
+        return JUST
+
+binOp   ::=
+        | ('or' | '-' | 'and') as basic
+        | '`' names=(~'`')+ '`'
+        | ('*' | '^' | '%' | '&' | '@' | '$' | '+' | '/' | '|' | '>' | '<' | '=' | '~' | '.' | '?' | '!' | '::')+ as seq
+        ->
+            Operator(loc @ basic, basic.value) if basic else\
+            Operator(loc @ names[0], recover_codes(names)) if names else\
+            Operator(loc @ seq[0], ''.join(map(lambda _: _.value, seq)))
+
+factor ::= [neg='-'] call=call
+            -> Call(loc @ neg, Symbol(loc@neg, "neg"), call) if neg else call
+
+void ::= '(' as mark ')' -> Void(loc@mark)
+
+call ::= leader=atom tail=(atom{is_indented})*
+
+         ->  reduce(lambda a, b: Call(loc @ a, a, b), tail, leader)
+
+atom ::= | NUM=num
+         | STR=DoubleQuotedStr
+         | SYMBOL=Name
+         | SUITE='{' [suites as stmts] '}' ['where' '{' lazy=_where* '}']
+         | IF='if' cond=expr 'then'
+            iftrue=expr
+             'else'
+            iffalse=expr
+         | LET='let'
+             id=identifier '=' expr=expr
+              'in'
+             out=expr
+         | RET='return' [expr=expr]
+         | INFIX = infix
+         | YIELD='yield' [expr=expr]
+         | JUST=(void | defun | defty)
+         | '(' JUST=expr TUPLE=(',' expr)* ')'
+         ->
+            if IF:     return If(loc @ IF, cond, iftrue, iffalse)
+            if LET:    return Let(loc @ LET, id, expr, out)
+            if SUITE:  return Suite(loc @ SUITE, stmts, lazy or ())
+            if RET:    return Return(loc @ RET, expr)
+            if YIELD:  return Yield(loc @ YIELD, expr)
+            if INFIX:  return INFIX
+            if NUM:    return Number(loc @ NUM, eval(NUM.value))
+            if STR:    return Str(loc @ STR, eval(STR.value))
+            if JUST:   return JUST if not TUPLE else Tuple(loc @ JUST, (JUST, *TUPLE[1::2]))
+            return Symbol(loc @ SYMBOL, SYMBOL.value)
+suites ::=  leader=stmt [(stmt{is_aligned})+] as tail -> [leader, *tail]
+
+module ::=  leader=stmt [(stmt{is_aligned})+] as tail ->  Module(loc, [leader, *tail], ())
