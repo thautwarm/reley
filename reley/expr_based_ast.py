@@ -5,17 +5,42 @@ from rbnf.easy import Tokenizer
 globals()['NamedTuple'] = object
 
 
-@record
-class Loc(NamedTuple):
+class Loc:
+    __slots__ = ['lineno', 'colno', 'filename']
 
     lineno: int
     colno: int
     filename: str
 
+    def __init__(self, lineno, colno, filename):
+        self.lineno = lineno
+        self.colno = colno
+        self.filename = filename
+
     def __matmul__(self, other):
         if isinstance(other, Tokenizer):
             return Loc(other.lineno, other.colno, self.filename)
         return Loc(*other.loc)
+
+    def __iter__(self):
+        yield self.lineno
+        yield self.colno
+        yield self.filename
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return 'Loc(lineno={!r}, colno={!r}, filename={!r})'.format(
+            self.lineno, self.colno, self.filename)
+
+    def update(self, lineno=None, colno=None, filename=None):
+        if lineno:
+            self.lineno = lineno
+        if colno:
+            self.colno = colno
+        if filename:
+            self.filename = filename
 
 
 class TAST:
@@ -58,24 +83,29 @@ class Arg(TAST, NamedTuple):
 
 
 @record
-class Where(TAST, NamedTuple):
-    loc: Loc
-    name: str
-    value: TAST
-
-
-@record
 class Suite(TAST, NamedTuple):
     loc: Loc
     statements: List[TAST]
-    lazy: List[Where]
 
 
 @record
-class Module(TAST, NamedTuple):
+class Definition(TAST, NamedTuple):
     loc: Loc
     statements: List[TAST]
-    lazy: List[Where]
+
+
+@record
+class Where(TAST, NamedTuple):
+    loc: Loc
+    out: Suite
+    pre_def: Definition
+
+
+@record
+class DefVar(TAST, NamedTuple):
+    loc: Loc
+    name: str
+    value: TAST
 
 
 @record
@@ -84,14 +114,6 @@ class If(TAST, NamedTuple):
     cond: TAST
     iftrue: TAST
     iffalse: TAST
-
-
-@record
-class Let(TAST, NamedTuple):
-    loc: Loc
-    name: str
-    value: TAST
-    out: TAST
 
 
 @record
@@ -117,6 +139,22 @@ class Number(TAST, NamedTuple):
 class Str(TAST, NamedTuple):
     loc: Loc
     value: str
+
+
+@record
+class HList(TAST, NamedTuple):
+    loc: Loc
+    seq: List[TAST]
+
+
+@record
+class HDict(TAST, NamedTuple):
+    loc: Loc
+    seq: List[Tuple[TAST, TAST]]
+
+
+def make_set(seq: List[TAST]):
+    return tuple((each, Void(each.loc)) for each in seq)
 
 
 @record
@@ -160,6 +198,11 @@ class Operator(TAST, NamedTuple):
 class Void(TAST, NamedTuple):
     loc: Loc
     pass
+
+
+@record
+class Module(NamedTuple):
+    stmts: Definition
 
 
 def transform(f):

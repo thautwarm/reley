@@ -47,12 +47,14 @@ def identity(it):
 
 def fix_bytecode(bc: Bytecode):
     for each in bc:
-        if isinstance(each, Instr):
-            arg = each.arg
-            if isinstance(arg, FreeVar):
-                name = arg.name
-                if name not in bc.freevars:
-                    bc.freevars.append(name)
+        if not isinstance(each, Instr):
+            continue
+        arg = each.arg
+        if not isinstance(arg, FreeVar):
+            continue
+        name = arg.name
+        if name not in bc.freevars:
+            bc.freevars.append(name)
 
 
 class Ctx:
@@ -76,12 +78,26 @@ class Ctx:
     def add_infix(self, name, priority):
         self.precedences = {**self.precedences, **{name: priority}}
 
+    def add_non_local(self, name, val):
+        if name not in self.symtb:
+            self.symtb = symtb = {**self.symtb}
+            symtb[name] = val
+
     def add_local(self, name, val):
         if name not in self.local:
             self.local[name] = val
             symtb = self.symtb = {**self.symtb}
             symtb[name] = val
             self.bc.flags |= NEWLOCALS
+
+    def add_locals(self, name_vals):
+        if any(name_vals):
+            self.bc.flags |= NEWLOCALS
+        for name, val in name_vals:
+            if name not in self.local:
+                self.local[name] = val
+                symtb = self.symtb = {**self.symtb}
+                symtb[name] = val
 
     def visit(self, tast):
         return visit(tast, self)
@@ -92,17 +108,28 @@ def visit(tast, _):
     return type(tast)
 
 
-@visit.case(DefFun)
-def _(tast: DefFun, ctx: Ctx):
-    new_ctx = ctx.new()
-    args = [arg.name for arg in tast.args]
+@visit.case(DefVar)
+def _(tast: DefVar, ctx: Ctx):
+    ctx.visit(tast.value)
+    ctx.add_local(tast.name, Val())
+    ctx.bc.append(Instr('STORE_FAST', arg=tast.name))
 
-    for each in tast.args:
+
+@visit.case(DefFun)
+def _(def_fun: DefFun, ctx: Ctx):
+    name = def_fun.name
+
+    # if name:
+    #     ctx.add_local(name, Val())
+
+    new_ctx = ctx.new()
+    args = [arg.name for arg in def_fun.args]
+    for each in def_fun.args:
         new_ctx.visit(each)
 
     bc = new_ctx.bc
     bc.kwonlyargcount = 0
-    bc.filename = tast.loc.filename
+    bc.filename = def_fun.loc.filename
 
     if any(args):
         bc.argcount = 1
@@ -111,56 +138,53 @@ def _(tast: DefFun, ctx: Ctx):
         else:
             arg_name = '.'.join(args)
             bc.argnames = [arg_name]
-            bc.append(Instr('LOAD_FAST', arg_name, lineno=tast.args[0].lineno))
+            bc.append(
+                Instr('LOAD_FAST', arg_name, lineno=def_fun.args[0].lineno))
             bc.append(Instr('UNPACK_SEQUENCE', arg=len(args)))
             for arg in args:
                 bc.append(Instr('STORE_FAST', arg=arg))
     else:
         bc.argcount = 0
 
-    new_ctx.visit(tast.body)
-
-    bc.name = tast.name or '<lambda>'
+    new_ctx.visit(def_fun.body)
+    bc.name = name or '<lambda>'
     bc.append(Instr("RETURN_VALUE"))
     fix_bytecode(bc)
     # for each in (bc):
     #     print(each)
     # print('++++++++++')
-
     if any(bc.freevars):
         for each in bc.freevars:
             if each not in ctx.local:
                 if each not in ctx.bc.freevars:
                     ctx.bc.freevars.append(each)
                 ctx.bc.append(
-                    Instr('LOAD_CLOSURE', FreeVar(each), lineno=tast.lineno))
+                    Instr(
+                        'LOAD_CLOSURE', FreeVar(each), lineno=def_fun.lineno))
             else:
                 if each not in ctx.bc.cellvars:
                     ctx.bc.cellvars.append(each)
-
                 ctx.bc.append(
-                    Instr('LOAD_CLOSURE', CellVar(each), lineno=tast.lineno))
+                    Instr(
+                        'LOAD_CLOSURE', CellVar(each), lineno=def_fun.lineno))
         ctx.bc.append(
-            Instr("BUILD_TUPLE", arg=len(bc.freevars), lineno=tast.lineno))
-
+            Instr("BUILD_TUPLE", arg=len(bc.freevars), lineno=def_fun.lineno))
     if ctx.is_nested:
         bc.flags |= NESTED
     bc.flags |= OPTIMIZED
-    ctx.bc.append(Instr('LOAD_CONST', arg=bc.to_code(), lineno=tast.lineno))
-    ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=tast.lineno))
+    code = bc.to_code()
+    dis.show_code(code)
+
+    ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=def_fun.lineno))
+    ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=def_fun.lineno))
     ctx.bc.append(
         Instr(
             'MAKE_FUNCTION',
             arg=8 if any(bc.freevars) else 0,
-            lineno=tast.lineno))
-
-    if tast.name:
-        name = tast.name
-        if name not in ctx.local:
-            ctx.add_local(name, Val())
-
-        ctx.bc.append(Instr('STORE_FAST', name, lineno=tast.lineno))
-        ctx.bc.append(Instr("LOAD_FAST", name, lineno=tast.lineno))
+            lineno=def_fun.lineno))
+    if name:
+        ctx.add_local(name, Val())
+        ctx.bc.append(Instr('STORE_FAST', name, lineno=def_fun.lineno))
 
 
 @visit.case(Number)
@@ -221,36 +245,41 @@ def _(ast: Arg, ctx: Ctx):
 
 @visit.case(Suite)
 def _(ast: Suite, ctx: Ctx):
-    not_start = True
-    pop = lambda lineno: not_start or ctx.bc.append(Instr('POP_TOP', lineno=lineno))
     if ast.statements:
+
+        def pop(lineno):
+            return lambda: ctx.bc.append(Instr('POP_TOP', lineno=lineno))
+
+        def now():
+            return ()
+
         for each in ast.statements:
+            now()
             pop(each.lineno)
             ctx.visit(each)
-            not_start = False
+            now = pop(each.lineno)
     else:
         ctx.bc.append(Instr('LOAD_CONST', None))
 
 
-def _last_lineno(bc):
-    for each in bc[::-1]:
-        if hasattr(each, 'lineno'):
-            return each.lineno
-    return 1
+@visit.case(Definition)
+def _(ast: Suite, ctx: Ctx):
+    if ast.statements:
+        for each in ast.statements:
+            ctx.visit(each)
 
 
 @visit.case(Module)
 def _(ast: Module, ctx: Ctx):
-    not_start = True
-    pop = lambda lineno: not_start or ctx.bc.append(Instr('POP_TOP', lineno=lineno))
-    for each in ast.statements:
-        pop(each.lineno)
-        ctx.visit(each)
-        not_start = False
+    ctx.visit(ast.stmts)
+    if ctx.local.get('main'):
 
-    lineno = _last_lineno(ctx.bc)
-
-    ctx.bc.append(Instr("RETURN_VALUE", lineno=lineno))
+        ctx.bc.append(Instr('LOAD_FAST', arg='main'))
+        ctx.bc.append(Instr('CALL_FUNCTION', arg=0))
+        ctx.bc.append(Instr("RETURN_VALUE"))
+    else:
+        ctx.bc.append(Instr("LOAD_CONST", 0))
+        ctx.bc.append(Instr("RETURN_VALUE"))
 
 
 @visit.case(BinSeq)
@@ -283,25 +312,37 @@ def _(ret: Return, ctx: Ctx):
     ctx.bc.append(Instr('RETURN_VALUE', lineno=ret.lineno))
 
 
-@visit.case(Return)
+@visit.case(Yield)
 def _(yd: Yield, ctx: Ctx):
     ctx.visit(yd.expr)
     ctx.bc.append(Instr("YIELD_VALUE", lineno=yd.lineno))
 
 
-@visit.case(Let)
-def _(let: Let, ctx: Ctx):
-    ctx.visit(let.value)
-    origin = let.name
+@visit.case(Where)
+def _(where: Where, ctx: Ctx):
+    names = new_entered_names(where.pre_def)
     count = len(ctx.bc)
-    target = f'{origin}.{count}'
+    targets = {origin: f'{origin}.{count}' for origin in names}
 
-    def substitue(it: TAST):
-        if hasattr(it, 'name') and it.name == origin:
-            return type(it)(**dict(it.iter_fields, name=target))
+    def substitute(it: TAST):
+        if hasattr(it, 'name'):
+            value = targets.get(it.name)
+            if value:
+                return type(it)(**dict(it.iter_fields, name=value))
+            return it
+        elif hasattr(it, 'names'):
+            return type(it)(**dict(
+                it.iter_fields,
+                names=tuple(targets.get(each) or each for each in it.names)))
         return it
 
-    ctx.add_local(target, Val())
-    ctx.bc.append(Instr('STORE_FAST', arg=target, lineno=let.value.lineno))
-    out = transform(substitue)(let.out)
+    pre_def = transform(substitute)(where.pre_def)
+    out = transform(substitute)(where.out)
+    ctx.visit(pre_def)
     ctx.visit(out)
+
+
+def new_entered_names(it: Definition):
+    for each in it.statements:
+        if isinstance(each, (DefFun, DefTy, DefVar)):
+            yield each.name
