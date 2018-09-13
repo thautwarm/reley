@@ -10,25 +10,25 @@ lam := R'\\'
 to_const cast := 'type' 'fn' 'def' '->'
                  '[|' '|]'
                  '{|' '|}'
-                 'return' 'if' 'else' 'let' 'or' 'and' 'not' 'xor'
+                 'return' 'if' 'else' 'let' 'or' 'and' 'not' 'xor' 'where'
                  '..' '::' 'in' '<-' 'then' 'infix' '=='
 
 identifier ::= mark=Name | '(' as mark ID=binOp ')' -> Operator(loc @ mark, ID.name if ID else mark.value)
 
-def_lambda ::= mark=lam fn=lambda_trailer -> DefFun(loc @ mark, None, fn.args, fn.body)
+def_lambda ::= mark=lam fn=lambda_trailer -> Lam(loc @ mark, None, fn.args, fn.body)
 
 lambda_trailer ::= (mark='(' args=[arguments] ')' | args=(mark=arg){1 1}) ('->' body=expr_stmts |  body=lambda_trailer)
-                   -> DefFun(loc @ mark, None, args or (), body)
+                   -> Lam(loc @ mark, None, args or (), body)
 
 define     ::= id=identifier fn=fun_trailer
                ->
-                  if isinstance(fn, DefFun):
+                  if isinstance(fn, Lam):
                     return DefFun(loc @ id, id.name, fn.args, fn.body)
                   else:
                     return DefVar(loc @ id, id.name, fn)
 
-fun_trailer ::= '=' body=expr | ((mark='(' args=[arguments] ')' | args=(mark=arg){1 1}) fun=fun_trailer)
-                ->  DefFun(loc @ mark, None, args or (), fun) if fun else body
+fun_trailer ::= '=' body=expr_stmts | ((mark='(' args=[arguments] ')' | args=(mark=arg){1 1}) fun=fun_trailer)
+                ->  Lam(loc @ mark, None, args or (), fun) if fun else body
 
 defty ::= mark='type' id=identifier '=' ty=ty  -> DefTy(loc @ mark, id.name, ty)
 

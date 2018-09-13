@@ -219,12 +219,8 @@ def transform(f):
 
     def generic_visit(ast: TAST):
         def stream():
-            ast_new = f(ast)
-            for key, value in ast_new.iter_fields:
-
-                if isinstance(value, Loc):
-                    yield key, value
-                elif type(value) in (tuple, list):
+            for key, value in ast.iter_fields:
+                if type(value) is tuple or isinstance(value, list):
                     yield key, list(ff(e) for e in value)
                 else:
                     yield key, ff(value)
@@ -235,4 +231,4 @@ def transform(f):
 
         return ast
 
-    return generic_visit
+    return ff

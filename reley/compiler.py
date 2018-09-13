@@ -1,7 +1,8 @@
 import dis
+import types
 
 from Redy.Magic.Pattern import Pattern
-from typing import Dict
+from typing import Dict, Generator
 from bytecode import Instr, Bytecode, FreeVar, CellVar, Label, dump_bytecode
 from toolz import curry
 from functools import reduce
@@ -12,6 +13,7 @@ map = curry(map)
 reduce = curry(reduce)
 getattr = curry(getattr)
 
+# code flags
 OPTIMIZED = 1
 NEWLOCALS = 2
 NESTED = 16
@@ -19,6 +21,12 @@ NOFREE = 64
 GENERATOR = 32
 COROUTINE = 128
 ITERABLE_COROUTINE = 256
+
+# compiling future
+DECLARING = 0
+EVALUATING = -1
+RESOLVING = -2
+RESOLVED = -3
 
 
 @curry
@@ -111,14 +119,27 @@ def visit(tast, _):
 @visit.case(DefVar)
 def _(tast: DefVar, ctx: Ctx):
     name = tast.name
+
+    # declare
     ctx.add_local(name, Val())
-    yield from ctx.visit(tast.value)
-    yield
+    yield DECLARING
+    # evaluating internal area
+    ctx.visit(tast.value)
+    yield EVALUATING
+    # resolve
+    while (yield RESOLVING) == RESOLVING:
+        pass
+
+    print(name, ctx.bc.cellvars, id(ctx))
     if name in ctx.bc.cellvars:
         ctx.bc.append(Instr("STORE_DEREF", arg=CellVar(name)))
     else:
         ctx.bc.append(Instr('STORE_FAST', arg=tast.name))
-    yield
+
+
+@visit.case(Lam)
+def _(lam: DefFun, ctx: Ctx):
+    async_app(visit_def_fun(lam, ctx), send=RESOLVED)
 
 
 @visit.case(DefFun)
@@ -126,9 +147,10 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     name = def_fun.name
     if name:
         ctx.add_local(name, Val())
+    yield DECLARING
 
-    new_ctx = ctx.new()
     args = [arg.name for arg in def_fun.args]
+    new_ctx = ctx.new()
     for each in def_fun.args:
         new_ctx.visit(each)
 
@@ -151,15 +173,15 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     else:
         bc.argcount = 0
 
-    yield
-
-    async_app(new_ctx.visit(def_fun.body))
+    new_ctx.visit(def_fun.body)
     bc.name = name or '<lambda>'
     bc.append(Instr("RETURN_VALUE"))
     fix_bytecode(bc)
     # for each in (bc):
     #     print(each)
     # print('++++++++++')
+
+    yield EVALUATING
 
     if any(bc.freevars):
         for each in bc.freevars:
@@ -182,8 +204,12 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
         bc.flags |= NESTED
     bc.flags |= OPTIMIZED
     # dump_bytecode(bc)
-    yield
     code = bc.to_code()
+
+    status = RESOLVING
+    while (yield status) == RESOLVING:
+        pass
+
     # dis.show_code(code)
     ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=def_fun.lineno))
     ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=def_fun.lineno))
@@ -192,7 +218,7 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
             'MAKE_FUNCTION',
             arg=8 if any(bc.freevars) else 0,
             lineno=def_fun.lineno))
-
+    print(name, ctx.bc.cellvars, id(ctx))
     if name:
         if name in ctx.bc.cellvars:
             ctx.bc.append(
@@ -204,13 +230,11 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
 @visit.case(Number)
 def _(tast: Number, ctx: Ctx):
     ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno))
-    yield
 
 
 @visit.case(Str)
 def _(tast: Str, ctx: Ctx):
     ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno))
-    yield
 
 
 @visit.case(Symbol)
@@ -219,23 +243,23 @@ def _(tast: Symbol, ctx: Ctx):
 
     if name in ctx.local and name not in ctx.bc.cellvars:
         ctx.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno))
-        return (yield)
+        return
     if name in ctx.symtb:
         ctx.bc.append(Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno))
-        return (yield)
+        return
     else:
         ctx.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno))
-        return (yield)
+        return
 
 
 @visit.case(Call)
 def visit_call(ast: Call, ctx: Ctx):
-    yield from ctx.visit(ast.callee)
+    ctx.visit(ast.callee)
 
     if isinstance(ast.arg, Void):
         ctx.bc.append(Instr("CALL_FUNCTION", arg=0, lineno=ast.lineno))
     else:
-        yield from ctx.visit(ast.arg)
+        ctx.visit(ast.arg)
         ctx.bc.append(Instr("CALL_FUNCTION", arg=1, lineno=ast.lineno))
 
 
@@ -243,13 +267,13 @@ def visit_call(ast: Call, ctx: Ctx):
 def _(ast: If, ctx: Ctx):
     label1 = Label()
     label2 = Label()
-    yield from ctx.visit(ast.cond)
+    ctx.visit(ast.cond)
     ctx.bc.append(
         Instr("POP_JUMP_IF_FALSE", arg=label1, lineno=ast.cond.lineno))
-    yield from ctx.visit(ast.iftrue)
+    ctx.visit(ast.iftrue)
     ctx.bc.append(Instr('JUMP_FORWARD', arg=label2, lineno=ast.iftrue.lineno))
     ctx.bc.append(label1)
-    yield from ctx.visit(ast.iffalse)
+    ctx.visit(ast.iffalse)
     ctx.bc.append(label2)
 
 
@@ -273,30 +297,23 @@ def _(ast: Suite, ctx: Ctx):
         for each in ast.statements:
             now()
             pop(each.lineno)
-            async_app(ctx.visit(each))
+            ctx.visit(each)
             now = pop(each.lineno)
     else:
         ctx.bc.append(Instr('LOAD_CONST', None))
-    yield
 
 
 @visit.case(Definition)
 def _(ast: Suite, ctx: Ctx):
     if ast.statements:
-        cos = []
-
         for each in ast.statements:
-            cos.append(ctx.visit(each))
-
-        run_event_loop(cos)
-    yield
+            yield ctx.visit(each)
 
 
 @visit.case(Module)
 def _(ast: Module, ctx: Ctx):
-    async_app(ctx.visit(ast.stmts))
+    run_event_loop(ctx.visit(ast.stmts))
     if ctx.local.get('main'):
-
         ctx.bc.append(Instr('LOAD_FAST', arg='main'))
         ctx.bc.append(Instr('CALL_FUNCTION', arg=0))
         ctx.bc.append(Instr("RETURN_VALUE"))
@@ -308,7 +325,7 @@ def _(ast: Module, ctx: Ctx):
 @visit.case(BinSeq)
 def _(ast: BinSeq, ctx: Ctx):
     reduce = bin_reduce(ctx.precedences)
-    yield from ctx.visit(reduce(ast.seq))
+    ctx.visit(reduce(ast.seq))
 
 
 @visit.case(Infix)
@@ -320,25 +337,24 @@ def _(ast: Infix, ctx: Ctx):
 @visit.case(Void)
 def _(_, ctx: Ctx):
     ctx.bc.append(Instr("LOAD_CONST", None))
-    yield
 
 
 @visit.case(Tuple)
 def _(tp: Tuple, ctx: Ctx):
     for each in tp.seq:
-        yield from ctx.visit(each)
+        ctx.visit(each)
     ctx.bc.append(Instr("BUILD_TUPLE", arg=len(tp.seq), lineno=tp.lineno))
 
 
 @visit.case(Return)
 def _(ret: Return, ctx: Ctx):
-    yield from ctx.visit(ret.expr)
+    ctx.visit(ret.expr)
     ctx.bc.append(Instr('RETURN_VALUE', lineno=ret.lineno))
 
 
 @visit.case(Yield)
 def _(yd: Yield, ctx: Ctx):
-    yield from ctx.visit(yd.expr)
+    ctx.visit(yd.expr)
     ctx.bc.append(Instr("YIELD_VALUE", lineno=yd.lineno))
 
 
@@ -362,8 +378,10 @@ def _(where: Where, ctx: Ctx):
 
     pre_def = transform(substitute)(where.pre_def)
     out = transform(substitute)(where.out)
-    yield from ctx.visit(pre_def)
-    yield from ctx.visit(out)
+
+    cos = list(ctx.visit(pre_def))
+    ctx.visit(out)
+    run_event_loop(cos)
 
 
 def new_entered_names(it: Definition):
@@ -372,16 +390,29 @@ def new_entered_names(it: Definition):
             yield each.name
 
 
-def async_app(co):
-    for _ in co:
+def async_app(co, send=None):
+    try:
+        v = co.send(None)
+        while True:
+            v = co.send(send or v)
+    except StopIteration:
         pass
 
 
-def run_event_loop(cos):
+def run_event_loop(cos: List[Generator]):
+    cos = list(cos)
     tasks = list(range(len(cos)))
+    results: List[object] = [None for _ in tasks]
     while tasks:
-        for each in tuple(tasks):
+        for idx in tuple(tasks):
             try:
-                next(cos[each])
+                each = cos[idx]
+                results[idx] = each.send(results[idx])
             except StopIteration:
-                tasks.remove(each)
+                tasks.remove(idx)
+        if not tasks:
+            return
+        if all((results[i] == RESOLVING for i in tasks)):
+            print(cos)
+            for i in tasks:
+                results[i] = RESOLVED
