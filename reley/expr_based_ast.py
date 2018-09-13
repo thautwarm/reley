@@ -76,6 +76,14 @@ class DefFun(TAST, NamedTuple):
 
 
 @record
+class Lam(TAST, NamedTuple):
+    loc: Loc
+    name: str
+    args: 'List[Arg]'
+    body: TAST
+
+
+@record
 class Arg(TAST, NamedTuple):
     loc: Loc
     name: str
