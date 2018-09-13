@@ -1,3 +1,5 @@
+import dis
+
 from Redy.Magic.Pattern import Pattern
 from typing import Dict
 from bytecode import Instr, Bytecode, FreeVar, CellVar, Label
@@ -46,10 +48,11 @@ def identity(it):
 def fix_bytecode(bc: Bytecode):
     for each in bc:
         if isinstance(each, Instr):
-            if isinstance(each.arg, CellVar):
-                bc.cellvars.append(each.arg.name)
-            elif isinstance(each.arg, FreeVar):
-                bc.freevars.append(each.arg.name)
+            arg = each.arg
+            if isinstance(arg, FreeVar):
+                name = arg.name
+                if name not in bc.freevars:
+                    bc.freevars.append(name)
 
 
 class Ctx:
@@ -78,6 +81,7 @@ class Ctx:
             self.local[name] = val
             symtb = self.symtb = {**self.symtb}
             symtb[name] = val
+            self.bc.flags |= NEWLOCALS
 
     def visit(self, tast):
         return visit(tast, self)
@@ -119,20 +123,26 @@ def _(tast: DefFun, ctx: Ctx):
     bc.name = tast.name or '<lambda>'
     bc.append(Instr("RETURN_VALUE"))
     fix_bytecode(bc)
-    for each in (bc):
-        print(each)
-    print('++++++++++')
+    # for each in (bc):
+    #     print(each)
+    # print('++++++++++')
+
     if any(bc.freevars):
         for each in bc.freevars:
             if each not in ctx.local:
-                ctx.bc.flags |= NEWLOCALS
-                ctx.bc.freevars.append(each)
-            ctx.bc.append(
-                Instr('LOAD_CLOSURE', CellVar(each), lineno=tast.lineno))
+                if each not in ctx.bc.freevars:
+                    ctx.bc.freevars.append(each)
+                ctx.bc.append(
+                    Instr('LOAD_CLOSURE', FreeVar(each), lineno=tast.lineno))
+            else:
+                if each not in ctx.bc.cellvars:
+                    ctx.bc.cellvars.append(each)
+
+                ctx.bc.append(
+                    Instr('LOAD_CLOSURE', CellVar(each), lineno=tast.lineno))
         ctx.bc.append(
             Instr("BUILD_TUPLE", arg=len(bc.freevars), lineno=tast.lineno))
-    else:
-        bc.flags |= NOFREE
+
     if ctx.is_nested:
         bc.flags |= NESTED
     bc.flags |= OPTIMIZED
