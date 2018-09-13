@@ -119,9 +119,9 @@ def _(tast: DefFun, ctx: Ctx):
     bc.name = tast.name or '<lambda>'
     bc.append(Instr("RETURN_VALUE"))
     fix_bytecode(bc)
-    # for each in (bc):
-    #     print(each)
-    # print('++++++++++')
+    for each in (bc):
+        print(each)
+    print('++++++++++')
     if any(bc.freevars):
         for each in bc.freevars:
             if each not in ctx.local:
@@ -136,7 +136,6 @@ def _(tast: DefFun, ctx: Ctx):
     if ctx.is_nested:
         bc.flags |= NESTED
     bc.flags |= OPTIMIZED
-
     ctx.bc.append(Instr('LOAD_CONST', arg=bc.to_code(), lineno=tast.lineno))
     ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=tast.lineno))
     ctx.bc.append(
