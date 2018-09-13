@@ -8,6 +8,7 @@ ze_exp = ze.compile('import reley.grammar.[*]')
 
 result = ze_exp.match(r"""
 infix 0 ($)
+($) a b = a b
 print $ (\a b c -> a) 1 2 3
 """).result
 # print(FormatCode(str(result))[0])
