@@ -1,13 +1,10 @@
-import dis
-import types
-
 from Redy.Magic.Pattern import Pattern
-from typing import Dict, Generator
-from bytecode import Instr, Bytecode, FreeVar, CellVar, Label, dump_bytecode
+from typing import Dict
+from bytecode import Instr, Bytecode, FreeVar, CellVar, Label
 from toolz import curry
 from functools import reduce
 from .precedence import bin_reduce
-from reley.expr_based_ast import *
+from .expr_based_ast import *
 
 map = curry(map)
 reduce = curry(reduce)
@@ -110,16 +107,20 @@ class Ctx:
     def load_name(self, tast):
         name = tast.name
 
-        if name in self.local and name not in self.bc.cellvars:
-            self.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno + 1))
+        if name in self.local:
+            if name not in self.bc.cellvars:
+                self.bc.append(
+                    Instr('LOAD_FAST', name, lineno=tast.lineno + 1))
+            else:
+                self.bc.append(
+                    Instr('LOAD_DEREF', CellVar(name), lineno=tast.lineno + 1))
             return
+
         if name in self.symtb:
             self.bc.append(
                 Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno + 1))
-            return
         else:
             self.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno + 1))
-            return
 
     def visit(self, tast):
         return visit(tast, self)
@@ -379,7 +380,7 @@ def _(ast: Module, ctx: Ctx):
         for each in exports:
             ctx.load_name(each)
             ctx.bc.append(
-                Instr("STORE_GLOBAL", arg=each.name, lineno=each.lineno))
+                Instr("STORE_GLOBAL", arg=each.name, lineno=each.lineno + 1))
 
     if ctx.local.get('main'):
         ctx.bc.append(Instr('LOAD_FAST', arg='main'))
@@ -455,10 +456,12 @@ def _(imp: Import, ctx: Ctx):
     ctx.bc.append(
         Instr(
             "LOAD_CONST",
-            tuple(each.name for each in imp.stuffs) if imp.stuffs else 0,
+            tuple(each.name for each in imp.stuffs) if imp.stuffs else
+            ('*', ) if imp.stuffs is 0 else 0,
             lineno=imp.lineno + 1))
     ctx.bc.append(
         Instr("IMPORT_NAME", arg=imp.imp_name, lineno=imp.lineno + 1))
+
     if imp.stuffs:
         for each in imp.stuffs:
             ctx.bc.append(
@@ -472,15 +475,19 @@ def _(imp: Import, ctx: Ctx):
             else:
                 ctx.bc.append(
                     Instr('STORE_FAST', name, lineno=each.lineno + 1))
-    name = imp.name
-    if not name:
-        ctx.bc.append(Instr("POP_TOP", lineno=imp.lineno + 1))
-        return
-    if name in ctx.bc.cellvars:
-        ctx.bc.append(
-            Instr("STORE_DEREF", CellVar(name), lineno=imp.lineno + 1))
-    else:
-        ctx.bc.append(Instr('STORE_FAST', name, lineno=imp.lineno + 1))
+    elif imp.stuffs is 0:
+        ctx.bc.append(Instr("IMPORT_STAR", lineno=imp.lineno + 1))
+
+    if imp.stuffs is not 0:
+        name = imp.name
+        if not name:
+            ctx.bc.append(Instr("POP_TOP", lineno=imp.lineno + 1))
+            return
+        if name in ctx.bc.cellvars:
+            ctx.bc.append(
+                Instr("STORE_DEREF", CellVar(name), lineno=imp.lineno + 1))
+        else:
+            ctx.bc.append(Instr('STORE_FAST', name, lineno=imp.lineno + 1))
 
 
 @visit.case(Where)

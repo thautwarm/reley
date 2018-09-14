@@ -1,7 +1,9 @@
+RBNF=\
+r"""
 import std.common.[Space Name DoubleQuotedStr]
 ignore [Space comment]
-[python] import reley.expr_based_ast.[*]
-[python] import reley.helper.[*]
+[python] import reley.impl.expr_based_ast.[*]
+[python] import reley.impl.helper.[*]
 [python] import functools.[*]
 
 
@@ -14,7 +16,7 @@ to_const cast := 'type' 'fn' 'def' '->' 'import' 'module'
                  '[|' '|]'
                  '{|' '|}'
                  'return' 'if' 'else' 'let' 'or' 'and' 'not' 'xor' 'where' 'as'
-                 '..' '::' 'in' '<-' 'then' 'infix' '=='
+                 '::' 'in' '<-' 'then' 'infix' '=='
 
 doc ::= items=docstr+ -> Doc(loc@items[0], '\n'.join(each.value[3:] for each in items))
 identifier ::= mark=Name | '(' as mark ID=binOp ')' -> Operator(loc @ mark, ID.name if ID else mark.value)
@@ -43,15 +45,17 @@ arg   ::= name=Name [':' ty=ty] -> Arg(loc @ name, name.value, ty)
 ty    ::= it=expr -> it
 
 
-alias_pair ::= imp_name=Name ['as' name=Name] -> Alias(loc @ imp_name, imp_name.value, name.value if name else imp_name.value)
+alias_pair ::= imp_name=identifier ['as' name=identifier] -> Alias(loc @ imp_name, imp_name.name, name.name if name else imp_name.name)
 
 dot_lst ::= head=alias_pair tail=(',' alias_pair)* -> (head, *tail[1::2])
 
-import_ ::= mark='import' names=(Name ('.' Name)*) ['as' name=Name] ['(' lst=dot_lst ')']
+
+wildcard ::= '*' -> 0
+import_ ::= mark='import' names=(Name ('.' Name)*) ['as' name=Name] ['(' (lst=dot_lst | star=wildcard)')']
            -> imp_name = ''.join(map(lambda _: _.value, names))
               name = name.value if name else None
               if not lst and not name: name = imp_name
-              Import(loc @ mark, imp_name, name, lst)
+              Import(loc @ mark, imp_name, name, lst or star)
 
 infix ::= mark='infix' precedence=num op=identifier -> Infix(loc @ mark, eval(precedence.value), op.name)
 
@@ -88,7 +92,6 @@ tuple ::= '(' as mark [head=expr tail=(',' expr)*] ')'
                 head.loc.update(*(loc @ mark))
                 return head
              Void(loc@mark)
-
 list  ::= '[' as mark  [head=expr tail=(',' expr)*] ']' -> HList(loc @ mark, (head, *tail[1::2]) if head else ())
 
 set   ::= '{' as mark head=expr tail=(',' expr)* '}' -> HDict(loc @ mark, make_set(head, *tail[1::2]))
@@ -120,4 +123,5 @@ stmt   ::=
 stmts  ::= leader=stmt [(stmt{is_aligned})+] as tail | '{|' stmt+ as no_indented '|}'
            -> Definition(loc @ leader, no_indented or [leader, *tail])
 
-module ::= [[doc=doc] 'module' [ exports=identifier+ ] 'where'] it=stmts -> Module(it, doc, exports)
+module ::= [[doc=doc] 'module' [ exports=(identifier (',' identifier)*)] 'where'] it=stmts -> Module(it, doc, exports[::2] if exports else None)
+"""

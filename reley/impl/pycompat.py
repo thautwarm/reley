@@ -11,6 +11,34 @@ from Redy.Tools.PathLib import Path
 
 parse_fn = None
 
+precedences = {
+    '+': 10,
+    '-': 10,
+    '*': 20,
+    '/': 20,
+    '%': 20,
+    '//': 20,
+    '$': 0,
+    'attr': 50,
+    'in': 40,
+    'contains': 40,
+}
+
+
+def filename_to_bc(f):
+    with Path(f).open('r') as fr:
+        source_code = fr.read()
+        parse = get_parse_fn()
+        result = parse(source_code)
+    f = str(Path(f))
+    result.state.filename = f
+    check_parsing_complete(source_code, result.tokens, result.state)
+    ast = result.result
+    ctx = Ctx({}, {}, Bytecode(), precedences.copy(), False)
+    ctx.visit(ast)
+    ctx.bc.filename = f
+    return ctx.bc.to_code()
+
 
 def get_parse_fn():
     global parse_fn
@@ -34,37 +62,23 @@ class ReleyLoader:
         f = self.mod_path
         setattr(module, '__path__', f)
         setattr(module, '__package__', self.mod_name)
-        with Path(f).open('r') as fr:
-            source_code = fr.read()
-
-            parse = get_parse_fn()
-            result = parse(source_code)
-        f = str(Path(f))
-        result.state.filename = f
-        check_parsing_complete(source_code, result.tokens, result.state)
-        ast = result.result
-        ctx = Ctx({}, {}, Bytecode(), {'+': 10}, False)
-        ctx.visit(ast)
-        ctx.bc.filename = f
-        dump_bytecode(ctx.bc)
-        code = ctx.bc.to_code()
-
+        code = filename_to_bc(f)
         exec(code, module.__dict__)
 
 
 class ReleyFinder:
-
-    virtual_name = 'my_virtual_module'
-
-    def find_spec(self, fullname: str, paths, target=None):
+    @classmethod
+    def find_spec(cls, fullname: str, paths, target=None):
+        paths = paths or [None]
         for path in paths:
-
-            path = path or './'
+            path = path or ''
             *packages, end = fullname.split('.')
             if packages:
                 packages = packages[1:]
 
             path = os.path.join(path, *packages)
+            if not os.path.exists(path):
+                continue
             for each in os.listdir(path):
 
                 name, ext = os.path.splitext(each)
@@ -75,4 +89,4 @@ class ReleyFinder:
                                     os.path.abspath(os.path.join(path, each))))
 
 
-sys.meta_path.append(ReleyFinder())
+sys.meta_path.append(ReleyFinder)

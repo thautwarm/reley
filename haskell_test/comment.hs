@@ -1,5 +1,5 @@
 module
-    test1
+    test1, ($)
 where
 
 import unittest (TestCase)
