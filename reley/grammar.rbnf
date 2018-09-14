@@ -1,18 +1,22 @@
 import std.common.[Space Name DoubleQuotedStr]
-ignore [Space]
+ignore [Space comment]
 [python] import reley.expr_based_ast.[*]
 [python] import reley.helper.[*]
 [python] import functools.[*]
 
+
+comment := R'(--.*)|(((\{\-\|)+?[\w\W]+?(\-\})+))'
+docstr  := R'(\|\|\|.*)'
 num := R'0[Xx][\da-fA-F]+|\d+(?:\.\d+|)(?:E\-{0,1}\d+|)'
 lam := R'\\'
 
-to_const cast := 'type' 'fn' 'def' '->' 'import'
+to_const cast := 'type' 'fn' 'def' '->' 'import' 'module'
                  '[|' '|]'
                  '{|' '|}'
                  'return' 'if' 'else' 'let' 'or' 'and' 'not' 'xor' 'where' 'as'
                  '..' '::' 'in' '<-' 'then' 'infix' '=='
 
+doc ::= items=docstr+ -> Doc(loc@items[0], '\n'.join(each.value[3:] for each in items))
 identifier ::= mark=Name | '(' as mark ID=binOp ')' -> Operator(loc @ mark, ID.name if ID else mark.value)
 
 def_lambda ::= mark=lam fn=lambda_trailer -> Lam(loc @ mark, None, fn.args, fn.body)
@@ -20,10 +24,10 @@ def_lambda ::= mark=lam fn=lambda_trailer -> Lam(loc @ mark, None, fn.args, fn.b
 lambda_trailer ::= (mark='(' [args=arguments] ')' | args=(mark=arg){1 1}) ('->' body=expr_stmts |  body=lambda_trailer)
                    -> Lam(loc @ mark, None, args or (), body)
 
-define     ::= id=identifier fn=fun_trailer
+define     ::= [doc=doc] id=identifier fn=fun_trailer
                ->
                   if isinstance(fn, Lam):
-                    return DefFun(loc @ id, id.name, fn.args, fn.body)
+                    return DefFun(loc @ id, id.name, fn.args, fn.body, doc)
                   else:
                     return DefVar(loc @ id, id.name, fn)
 
@@ -80,7 +84,9 @@ atom ::= | '{|' as mark expr_stmts '|}'
 
 tuple ::= '(' as mark [head=expr tail=(',' expr)*] ')'
           -> if tail: return Tuple(loc @ mark, (head, *tail[1::2]))
-             if head: return head
+             if head:
+                head.loc.update(*(loc @ mark))
+                return head
              Void(loc@mark)
 
 list  ::= '[' as mark  [head=expr tail=(',' expr)*] ']' -> HList(loc @ mark, (head, *tail[1::2]) if head else ())
@@ -114,4 +120,4 @@ stmt   ::=
 stmts  ::= leader=stmt [(stmt{is_aligned})+] as tail | '{|' stmt+ as no_indented '|}'
            -> Definition(loc @ leader, no_indented or [leader, *tail])
 
-module ::= it=stmts -> Module(it)
+module ::= [[doc=doc] 'module' [ exports=identifier+ ] 'where'] it=stmts -> Module(it, doc, exports)

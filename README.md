@@ -12,5 +12,5 @@ sh> python <out>.pyc
 
 About Reley
 ====================
-It's in an early stage with many shortages.  
+It's in an early stage with many shortages.
 Most of the crucial Haskell features are missing.

@@ -57,7 +57,7 @@ class TAST:
         return self.loc.lineno
 
 
-loc = Loc(0, 0, "")
+loc = Loc(1, 1, "")
 
 
 @record
@@ -73,6 +73,7 @@ class DefFun(TAST, NamedTuple):
     name: str
     args: 'List[Arg]'
     body: TAST
+    doc: 'Doc'
 
 
 @record
@@ -215,6 +216,12 @@ class Alias(TAST, NamedTuple):
 
 
 @record
+class Doc(TAST, NamedTuple):
+    loc: Loc
+    text: str
+
+
+@record
 class Import(TAST, NamedTuple):
     loc: Loc
     imp_name: str
@@ -225,6 +232,8 @@ class Import(TAST, NamedTuple):
 @record
 class Module(NamedTuple):
     stmts: Definition
+    doc: Doc
+    exports: List[Operator]
 
 
 def transform(f):

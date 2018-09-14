@@ -9,6 +9,8 @@ from importlib._bootstrap_external import MAGIC_NUMBER
 import marshal
 import struct, time
 
+import sys
+
 parse_fn = None
 
 
@@ -25,8 +27,8 @@ def get_parse_fn():
 talking = Talking()
 
 
-@talking.alias('cc')
-def interactive(f: 'input filename', o: 'output filename'):
+@talking
+def cc(f: 'input filename', o: 'output filename'):
     """
     compile reley source code into pyc files
     """

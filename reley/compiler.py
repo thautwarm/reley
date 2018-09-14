@@ -107,6 +107,20 @@ class Ctx:
                 symtb = self.symtb = {**self.symtb}
                 symtb[name] = val
 
+    def load_name(self, tast):
+        name = tast.name
+
+        if name in self.local and name not in self.bc.cellvars:
+            self.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno + 1))
+            return
+        if name in self.symtb:
+            self.bc.append(
+                Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno + 1))
+            return
+        else:
+            self.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno + 1))
+            return
+
     def visit(self, tast):
         return visit(tast, self)
 
@@ -197,6 +211,8 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
         new_ctx.visit(each)
 
     bc = new_ctx.bc
+    if isinstance(def_fun, DefFun) and def_fun.doc:
+        bc.docstring = def_fun.doc.text
     bc.kwonlyargcount = 0
     bc.filename = def_fun.loc.filename
 
@@ -286,18 +302,7 @@ def _(tast: Str, ctx: Ctx):
 
 @visit.case(Symbol)
 def _(tast: Symbol, ctx: Ctx):
-    name = tast.name
-
-    if name in ctx.local and name not in ctx.bc.cellvars:
-        ctx.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno + 1))
-        return
-    if name in ctx.symtb:
-        ctx.bc.append(
-            Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno + 1))
-        return
-    else:
-        ctx.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno + 1))
-        return
+    ctx.load_name(tast)
 
 
 @visit.case(Call)
@@ -361,12 +366,21 @@ def _(ast: Suite, ctx: Ctx):
 
 @visit.case(Module)
 def _(ast: Module, ctx: Ctx):
+
     cos = list(ctx.visit(ast.stmts))
     start(cos)
     reach(DECLARED, cos)
     reach(EVALUATED, cos)
     reach(RESOLVED, cos)
     reach(END, cos)
+
+    exports = ast.exports
+    if exports:
+        for each in exports:
+            ctx.load_name(each)
+            ctx.bc.append(
+                Instr("STORE_GLOBAL", arg=each.name, lineno=each.lineno))
+
     if ctx.local.get('main'):
         ctx.bc.append(Instr('LOAD_FAST', arg='main'))
         ctx.bc.append(Instr('CALL_FUNCTION', arg=0))
@@ -374,6 +388,8 @@ def _(ast: Module, ctx: Ctx):
     else:
         ctx.bc.append(Instr("LOAD_CONST", 0))
         ctx.bc.append(Instr("RETURN_VALUE"))
+    if ast.doc:
+        ctx.bc.docstring = ast.doc.text
 
 
 @visit.case(BinSeq)
