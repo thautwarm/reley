@@ -1,3 +1,5 @@
+RBNF=\
+r"""
 import std.common.[Space Name DoubleQuotedStr]
 ignore [Space]
 [python] import reley.expr_based_ast.[*]
@@ -115,3 +117,4 @@ stmts  ::= leader=stmt [(stmt{is_aligned})+] as tail | '{|' stmt+ as no_indented
            -> Definition(loc @ leader, no_indented or [leader, *tail])
 
 module ::= it=stmts -> Module(it)
+"""
