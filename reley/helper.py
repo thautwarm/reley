@@ -5,6 +5,7 @@ from .expr_based_ast import *
 
 def is_indented(trailer, state):
     leader = state.ctx['leader']
+
     return leader.loc.colno < trailer.loc.colno
 
 
@@ -13,7 +14,10 @@ is_indented.name = 'is_indented'
 
 def is_aligned(trailer, state):
     leader = state.ctx['leader']
-    return leader.loc.colno == trailer.loc.colno
+    colno1 = leader.loc.colno
+    colno2 = trailer.loc.colno
+    # THIS is a BUG in RBNF! colno could be less than 1 when at the very first of text!
+    return (colno1 is 0 and colno2 is 1) or colno1 == colno2
 
 
 is_aligned.name = 'is_aligned'

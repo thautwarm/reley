@@ -123,11 +123,55 @@ def _(tast: DefVar, ctx: Ctx):
     # declare
     ctx.add_local(name, Val())
     yield from wait(DECLARED)
+    new_ctx = ctx.new()
     # evaluating internal area
-    ctx.visit(tast.value)
+    bc = new_ctx.bc
+    bc.kwonlyargcount = 0
+    bc.filename = tast.loc.filename
+    bc.argcount = 0
+    new_ctx.visit(tast.value)
+    bc.name = name or '<lambda>'
+    bc.append(Instr("RETURN_VALUE"))
+    fix_bytecode(new_ctx.bc)
     yield from wait(EVALUATED)
     # resolve
+    delay = []
+    delay_append = delay.append
+    if any(bc.freevars):
+        for each in bc.freevars:
+            if each not in ctx.local:
+                if each not in ctx.bc.freevars:
+                    ctx.bc.freevars.append(each)
+                delay_append(
+                    Instr(
+                        'LOAD_CLOSURE', FreeVar(each), lineno=tast.lineno + 1))
+            else:
+                if each not in ctx.bc.cellvars:
+                    ctx.bc.cellvars.append(each)
+                delay_append(
+                    Instr(
+                        'LOAD_CLOSURE', CellVar(each), lineno=tast.lineno + 1))
+        delay_append(
+            Instr("BUILD_TUPLE", arg=len(bc.freevars), lineno=tast.lineno + 1))
+
+    if ctx.is_nested:
+        bc.flags |= NESTED
+    bc.flags |= OPTIMIZED
     yield from wait(RESOLVED)
+
+    code = bc.to_code()
+
+    # dis.show_code(code)
+    ctx.bc.extend(delay)
+    ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=tast.lineno + 1))
+    ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=tast.lineno + 1))
+    ctx.bc.append(
+        Instr(
+            'MAKE_FUNCTION',
+            arg=8 if any(bc.freevars) else 0,
+            lineno=tast.lineno + 1))
+
+    ctx.bc.append(Instr("CALL_FUNCTION", arg=0, lineno=tast.lineno + 1))
     if name in ctx.bc.cellvars:
         ctx.bc.append(Instr("STORE_DEREF", arg=CellVar(name)))
     else:
@@ -164,7 +208,8 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
             arg_name = '.'.join(args)
             bc.argnames = [arg_name]
             bc.append(
-                Instr('LOAD_FAST', arg_name, lineno=def_fun.args[0].lineno))
+                Instr(
+                    'LOAD_FAST', arg_name, lineno=def_fun.args[0].lineno + 1))
             bc.append(Instr('UNPACK_SEQUENCE', arg=len(args)))
             for arg in args:
                 bc.append(Instr('STORE_FAST', arg=arg))
@@ -179,22 +224,30 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     #     print(each)
     # print('++++++++++')
     yield from wait(EVALUATED)
+    delay = []
+    delay_append = delay.append
     if any(bc.freevars):
         for each in bc.freevars:
             if each not in ctx.local:
                 if each not in ctx.bc.freevars:
                     ctx.bc.freevars.append(each)
-                ctx.bc.append(
+                delay_append(
                     Instr(
-                        'LOAD_CLOSURE', FreeVar(each), lineno=def_fun.lineno))
+                        'LOAD_CLOSURE',
+                        FreeVar(each),
+                        lineno=def_fun.lineno + 1))
             else:
                 if each not in ctx.bc.cellvars:
                     ctx.bc.cellvars.append(each)
-                ctx.bc.append(
+                delay_append(
                     Instr(
-                        'LOAD_CLOSURE', CellVar(each), lineno=def_fun.lineno))
-        ctx.bc.append(
-            Instr("BUILD_TUPLE", arg=len(bc.freevars), lineno=def_fun.lineno))
+                        'LOAD_CLOSURE',
+                        CellVar(each),
+                        lineno=def_fun.lineno + 1))
+        delay_append(
+            Instr(
+                "BUILD_TUPLE", arg=len(bc.freevars),
+                lineno=def_fun.lineno + 1))
 
     if ctx.is_nested:
         bc.flags |= NESTED
@@ -203,32 +256,32 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     # print(name, ctx.local.keys(), ctx.bc.freevars, ctx.bc.cellvars)
     yield from wait(RESOLVED)
     code = bc.to_code()
-
+    ctx.bc.extend(delay)
     # dis.show_code(code)
-    ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=def_fun.lineno))
-    ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=def_fun.lineno))
+    ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=def_fun.lineno + 1))
+    ctx.bc.append(Instr('LOAD_CONST', arg=bc.name, lineno=def_fun.lineno + 1))
     ctx.bc.append(
         Instr(
             'MAKE_FUNCTION',
             arg=8 if any(bc.freevars) else 0,
-            lineno=def_fun.lineno))
+            lineno=def_fun.lineno + 1))
 
     if name:
         if name in ctx.bc.cellvars:
             ctx.bc.append(
-                Instr("STORE_DEREF", CellVar(name), lineno=def_fun.lineno))
+                Instr("STORE_DEREF", CellVar(name), lineno=def_fun.lineno + 1))
         else:
-            ctx.bc.append(Instr('STORE_FAST', name, lineno=def_fun.lineno))
+            ctx.bc.append(Instr('STORE_FAST', name, lineno=def_fun.lineno + 1))
 
 
 @visit.case(Number)
 def _(tast: Number, ctx: Ctx):
-    ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno))
+    ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno + 1))
 
 
 @visit.case(Str)
 def _(tast: Str, ctx: Ctx):
-    ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno))
+    ctx.bc.append(Instr("LOAD_CONST", tast.value, lineno=tast.lineno + 1))
 
 
 @visit.case(Symbol)
@@ -236,13 +289,14 @@ def _(tast: Symbol, ctx: Ctx):
     name = tast.name
 
     if name in ctx.local and name not in ctx.bc.cellvars:
-        ctx.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno))
+        ctx.bc.append(Instr('LOAD_FAST', name, lineno=tast.lineno + 1))
         return
     if name in ctx.symtb:
-        ctx.bc.append(Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno))
+        ctx.bc.append(
+            Instr('LOAD_DEREF', FreeVar(name), lineno=tast.lineno + 1))
         return
     else:
-        ctx.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno))
+        ctx.bc.append(Instr('LOAD_GLOBAL', name, lineno=tast.lineno + 1))
         return
 
 
@@ -251,10 +305,10 @@ def visit_call(ast: Call, ctx: Ctx):
     ctx.visit(ast.callee)
 
     if isinstance(ast.arg, Void):
-        ctx.bc.append(Instr("CALL_FUNCTION", arg=0, lineno=ast.lineno))
+        ctx.bc.append(Instr("CALL_FUNCTION", arg=0, lineno=ast.lineno + 1))
     else:
         ctx.visit(ast.arg)
-        ctx.bc.append(Instr("CALL_FUNCTION", arg=1, lineno=ast.lineno))
+        ctx.bc.append(Instr("CALL_FUNCTION", arg=1, lineno=ast.lineno + 1))
 
 
 @visit.case(If)
@@ -263,9 +317,10 @@ def _(ast: If, ctx: Ctx):
     label2 = Label()
     ctx.visit(ast.cond)
     ctx.bc.append(
-        Instr("POP_JUMP_IF_FALSE", arg=label1, lineno=ast.cond.lineno))
+        Instr("POP_JUMP_IF_FALSE", arg=label1, lineno=ast.cond.lineno + 1))
     ctx.visit(ast.iftrue)
-    ctx.bc.append(Instr('JUMP_FORWARD', arg=label2, lineno=ast.iftrue.lineno))
+    ctx.bc.append(
+        Instr('JUMP_FORWARD', arg=label2, lineno=ast.iftrue.lineno + 1))
     ctx.bc.append(label1)
     ctx.visit(ast.iffalse)
     ctx.bc.append(label2)
@@ -283,7 +338,7 @@ def _(ast: Suite, ctx: Ctx):
     if ast.statements:
 
         def pop(lineno):
-            return lambda: ctx.bc.append(Instr('POP_TOP', lineno=lineno))
+            return lambda: ctx.bc.append(Instr('POP_TOP', lineno=lineno + 1))
 
         def now():
             return ()
@@ -342,19 +397,74 @@ def _(_, ctx: Ctx):
 def _(tp: Tuple, ctx: Ctx):
     for each in tp.seq:
         ctx.visit(each)
-    ctx.bc.append(Instr("BUILD_TUPLE", arg=len(tp.seq), lineno=tp.lineno))
+    ctx.bc.append(Instr("BUILD_TUPLE", arg=len(tp.seq), lineno=tp.lineno + 1))
 
 
 @visit.case(Return)
 def _(ret: Return, ctx: Ctx):
     ctx.visit(ret.expr)
-    ctx.bc.append(Instr('RETURN_VALUE', lineno=ret.lineno))
+    ctx.bc.append(Instr('RETURN_VALUE', lineno=ret.lineno + 1))
 
 
 @visit.case(Yield)
 def _(yd: Yield, ctx: Ctx):
     ctx.visit(yd.expr)
-    ctx.bc.append(Instr("YIELD_VALUE", lineno=yd.lineno))
+    ctx.bc.append(Instr("YIELD_VALUE", lineno=yd.lineno + 1))
+
+
+@visit.case(HList)
+def _(lst: HList, ctx: Ctx):
+
+    seq = lst.seq
+    for each in seq:
+        ctx.visit(each)
+    ctx.bc.append(Instr("LOAD_CONST", arg=(), lineno=lst.lineno))
+    for _ in range(len(seq)):
+        ctx.bc.append(Instr("BUILD_TUPLE", arg=2, lineno=lst.lineno))
+
+
+@visit.case(Import)
+def _(imp: Import, ctx: Ctx):
+
+    if imp.name:
+        ctx.add_local(imp.name, Val())
+    if imp.stuffs:
+        for each in imp.stuffs:
+            ctx.add_local(each.name, Val())
+
+    yield from wait(DECLARED)
+    yield from wait(EVALUATED)
+    yield from wait(RESOLVED)
+    ctx.bc.append(Instr("LOAD_CONST", arg=0, lineno=imp.lineno + 1))
+    ctx.bc.append(
+        Instr(
+            "LOAD_CONST",
+            tuple(each.name for each in imp.stuffs) if imp.stuffs else 0,
+            lineno=imp.lineno + 1))
+    ctx.bc.append(
+        Instr("IMPORT_NAME", arg=imp.imp_name, lineno=imp.lineno + 1))
+    if imp.stuffs:
+        for each in imp.stuffs:
+            ctx.bc.append(
+                Instr(
+                    "IMPORT_FROM", arg=each.imp_name, lineno=each.lineno + 1))
+            name = each.name
+            if name in ctx.bc.cellvars:
+                ctx.bc.append(
+                    Instr(
+                        "STORE_DEREF", CellVar(name), lineno=each.lineno + 1))
+            else:
+                ctx.bc.append(
+                    Instr('STORE_FAST', name, lineno=each.lineno + 1))
+    name = imp.name
+    if not name:
+        ctx.bc.append(Instr("POP_TOP", lineno=imp.lineno + 1))
+        return
+    if name in ctx.bc.cellvars:
+        ctx.bc.append(
+            Instr("STORE_DEREF", CellVar(name), lineno=imp.lineno + 1))
+    else:
+        ctx.bc.append(Instr('STORE_FAST', name, lineno=imp.lineno + 1))
 
 
 @visit.case(Where)
@@ -365,12 +475,12 @@ def _(where: Where, ctx: Ctx):
     targets = {origin: f'{origin}.{count}' for origin in names}
 
     def substitute(it: TAST):
-        if hasattr(it, 'name'):
+        if hasattr(it, 'name') and it.name:
             value = targets.get(it.name)
             if value:
                 return type(it)(**dict(it.iter_fields, name=value))
             return it
-        elif hasattr(it, 'names'):
+        elif hasattr(it, 'names') and it.names:
             return type(it)(**dict(
                 it.iter_fields,
                 names=tuple(targets.get(each) or each for each in it.names)))

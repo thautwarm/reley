@@ -205,7 +205,21 @@ class Operator(TAST, NamedTuple):
 @record
 class Void(TAST, NamedTuple):
     loc: Loc
-    pass
+
+
+@record
+class Alias(TAST, NamedTuple):
+    loc: Loc
+    imp_name: str
+    name: str
+
+
+@record
+class Import(TAST, NamedTuple):
+    loc: Loc
+    imp_name: str
+    name: str
+    stuffs: List[Alias]
 
 
 @record
