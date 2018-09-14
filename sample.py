@@ -1,7 +1,7 @@
 from rbnf.easy import *
 from astpretty import pprint
 import dis
-from reley.compiler import Ctx, Bytecode, async_app
+from reley.compiler import Ctx, Bytecode
 from bytecode import dump_bytecode
 from yapf.yapflib.yapf_api import FormatCode
 
@@ -12,9 +12,9 @@ result = ze_exp.match(r"""
 infix 1 (`app`)    
 infix 0 ($)
 ($) a b = a b
-app a = a 1
+app1 a = a 1
 main () =
-    print $ app (\a -> a + x)
+    print $ app1 (\a -> a + x)
     where
         x = 1
 
@@ -31,4 +31,4 @@ global_ctx = {'+': lambda a: lambda b: a + b}
 code = ctx.bc.to_code()
 
 #
-# exec(code, global_ctx)
+exec(code, global_ctx)

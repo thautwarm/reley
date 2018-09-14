@@ -23,10 +23,10 @@ COROUTINE = 128
 ITERABLE_COROUTINE = 256
 
 # compiling future
-DECLARING = 0
-EVALUATING = -1
-RESOLVING = -2
-RESOLVED = -3
+DECLARED = 0
+EVALUATED = -1
+RESOLVED = -2
+END = -3
 
 
 @curry
@@ -122,15 +122,12 @@ def _(tast: DefVar, ctx: Ctx):
 
     # declare
     ctx.add_local(name, Val())
-    yield DECLARING
+    yield from wait(DECLARED)
     # evaluating internal area
     ctx.visit(tast.value)
-    yield EVALUATING
+    yield from wait(EVALUATED)
     # resolve
-    while (yield RESOLVING) == RESOLVING:
-        pass
-
-    print(name, ctx.bc.cellvars, id(ctx))
+    yield from wait(RESOLVED)
     if name in ctx.bc.cellvars:
         ctx.bc.append(Instr("STORE_DEREF", arg=CellVar(name)))
     else:
@@ -139,7 +136,9 @@ def _(tast: DefVar, ctx: Ctx):
 
 @visit.case(Lam)
 def _(lam: DefFun, ctx: Ctx):
-    async_app(visit_def_fun(lam, ctx), send=RESOLVED)
+    cos = (visit_def_fun(lam, ctx), )
+    start(cos)
+    reach(END, cos)
 
 
 @visit.case(DefFun)
@@ -147,8 +146,7 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     name = def_fun.name
     if name:
         ctx.add_local(name, Val())
-    yield DECLARING
-
+    yield from wait(DECLARED)
     args = [arg.name for arg in def_fun.args]
     new_ctx = ctx.new()
     for each in def_fun.args:
@@ -180,9 +178,7 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
     # for each in (bc):
     #     print(each)
     # print('++++++++++')
-
-    yield EVALUATING
-
+    yield from wait(EVALUATED)
     if any(bc.freevars):
         for each in bc.freevars:
             if each not in ctx.local:
@@ -204,11 +200,9 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
         bc.flags |= NESTED
     bc.flags |= OPTIMIZED
     # dump_bytecode(bc)
+    # print(name, ctx.local.keys(), ctx.bc.freevars, ctx.bc.cellvars)
+    yield from wait(RESOLVED)
     code = bc.to_code()
-
-    status = RESOLVING
-    while (yield status) == RESOLVING:
-        pass
 
     # dis.show_code(code)
     ctx.bc.append(Instr('LOAD_CONST', arg=code, lineno=def_fun.lineno))
@@ -218,7 +212,7 @@ def visit_def_fun(def_fun: DefFun, ctx: Ctx):
             'MAKE_FUNCTION',
             arg=8 if any(bc.freevars) else 0,
             lineno=def_fun.lineno))
-    print(name, ctx.bc.cellvars, id(ctx))
+
     if name:
         if name in ctx.bc.cellvars:
             ctx.bc.append(
@@ -312,7 +306,12 @@ def _(ast: Suite, ctx: Ctx):
 
 @visit.case(Module)
 def _(ast: Module, ctx: Ctx):
-    run_event_loop(ctx.visit(ast.stmts))
+    cos = list(ctx.visit(ast.stmts))
+    start(cos)
+    reach(DECLARED, cos)
+    reach(EVALUATED, cos)
+    reach(RESOLVED, cos)
+    reach(END, cos)
     if ctx.local.get('main'):
         ctx.bc.append(Instr('LOAD_FAST', arg='main'))
         ctx.bc.append(Instr('CALL_FUNCTION', arg=0))
@@ -360,8 +359,9 @@ def _(yd: Yield, ctx: Ctx):
 
 @visit.case(Where)
 def _(where: Where, ctx: Ctx):
+    bc = ctx.bc
     names = new_entered_names(where.pre_def)
-    count = len(ctx.bc)
+    count = len(bc)
     targets = {origin: f'{origin}.{count}' for origin in names}
 
     def substitute(it: TAST):
@@ -380,8 +380,16 @@ def _(where: Where, ctx: Ctx):
     out = transform(substitute)(where.out)
 
     cos = list(ctx.visit(pre_def))
+    start(cos)
+    reach(DECLARED, cos)
+    n1 = len(bc)
     ctx.visit(out)
-    run_event_loop(cos)
+    n2 = len(bc)
+    reach(EVALUATED, cos)
+    reach(RESOLVED, cos)
+    reach(END, cos)
+    n3 = len(bc)
+    bc[n1:n3] = bc[n2:n3] + bc[n1:n2]
 
 
 def new_entered_names(it: Definition):
@@ -390,29 +398,20 @@ def new_entered_names(it: Definition):
             yield each.name
 
 
-def async_app(co, send=None):
-    try:
-        v = co.send(None)
-        while True:
-            v = co.send(send or v)
-    except StopIteration:
+def wait(signal):
+    while (yield signal) == signal:
         pass
 
 
-def run_event_loop(cos: List[Generator]):
-    cos = list(cos)
-    tasks = list(range(len(cos)))
-    results: List[object] = [None for _ in tasks]
-    while tasks:
-        for idx in tuple(tasks):
-            try:
-                each = cos[idx]
-                results[idx] = each.send(results[idx])
-            except StopIteration:
-                tasks.remove(idx)
-        if not tasks:
-            return
-        if all((results[i] == RESOLVING for i in tasks)):
-            print(cos)
-            for i in tasks:
-                results[i] = RESOLVED
+def start(coroutines):
+    for each in coroutines:
+        each.send(None)
+
+
+def reach(signal, coroutines):
+    for each in coroutines:
+        try:
+            while each.send(signal) != signal:
+                pass
+        except StopIteration:
+            pass
