@@ -5,17 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c0fd0df6-a489-4d3c-abe0-47b740f3da48" name="Default" comment="">
-      <change afterPath="$PROJECT_DIR$/next_version" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/reley/cli.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/sum_n.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/reley/compiler.py" beforeDir="false" afterPath="$PROJECT_DIR$/reley/compiler.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/reley/expr_based_ast.py" beforeDir="false" afterPath="$PROJECT_DIR$/reley/expr_based_ast.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/reley/grammar.rbnf" beforeDir="false" afterPath="$PROJECT_DIR$/reley/grammar.rbnf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/reley/helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/reley/helper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sample.py" beforeDir="false" afterPath="$PROJECT_DIR$/sample.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -92,8 +82,8 @@
         <entry file="file://$PROJECT_DIR$/README.md">
           <provider selected="true" editor-type-id="split-provider[text-editor;MarkdownPreviewEditor]">
             <state split_layout="SPLIT">
-              <first_editor relative-caret-position="150">
-                <caret line="10" selection-start-line="10" selection-end-line="10" />
+              <first_editor relative-caret-position="210">
+                <caret line="14" column="45" selection-start-line="14" selection-start-column="45" selection-end-line="14" selection-end-column="45" />
               </first_editor>
               <second_editor>
                 <markdownNavigatorState />
@@ -425,9 +415,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="3015">
           <caret line="201" lean-forward="true" selection-start-line="201" selection-end-line="201" />
-          <folding>
-            <element signature="e#0#42#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -466,13 +453,7 @@
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/reley/expr_based_ast.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <folding>
-            <element signature="e#0#42#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
+      <provider selected="true" editor-type-id="text-editor" />
     </entry>
     <entry file="file://$PROJECT_DIR$/sample.py">
       <provider selected="true" editor-type-id="text-editor">
@@ -509,13 +490,7 @@
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/reley/expr_based_ast.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <folding>
-            <element signature="e#0#42#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
+      <provider selected="true" editor-type-id="text-editor" />
     </entry>
     <entry file="file://$PROJECT_DIR$/reley/compiler.py">
       <provider selected="true" editor-type-id="text-editor">
@@ -556,13 +531,7 @@
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/reley/expr_based_ast.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <folding>
-            <element signature="e#0#42#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
+      <provider selected="true" editor-type-id="text-editor" />
     </entry>
     <entry file="file://$PROJECT_DIR$/reley/grammar.rbnf">
       <provider selected="true" editor-type-id="text-editor">
@@ -635,13 +604,7 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/c.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <caret selection-end-line="5" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/c.py" />
     <entry file="file://$PROJECT_DIR$/next_version">
       <provider selected="true" editor-type-id="text-editor">
         <state>
@@ -653,9 +616,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="185">
           <caret line="211" column="12" selection-start-line="211" selection-start-column="12" selection-end-line="211" selection-end-column="12" />
-          <folding>
-            <element signature="e#0#42#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -663,9 +623,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="450">
           <caret line="30" column="44" selection-start-line="30" selection-start-column="44" selection-end-line="30" selection-end-column="44" />
-          <folding>
-            <element signature="e#0#28#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -750,8 +707,8 @@
     <entry file="file://$PROJECT_DIR$/README.md">
       <provider selected="true" editor-type-id="split-provider[text-editor;MarkdownPreviewEditor]">
         <state split_layout="SPLIT">
-          <first_editor relative-caret-position="150">
-            <caret line="10" selection-start-line="10" selection-end-line="10" />
+          <first_editor relative-caret-position="210">
+            <caret line="14" column="45" selection-start-line="14" selection-start-column="45" selection-end-line="14" selection-end-column="45" />
           </first_editor>
           <second_editor>
             <markdownNavigatorState />
