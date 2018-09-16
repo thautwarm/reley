@@ -1,4 +1,6 @@
-See examples at `test/*.hs`.
+[![Build Status](https://travis-ci.org/thautwarm/reley.svg?branch=master)](https://travis-ci.org/thautwarm/reley)
+
+See examples at `haskell_test/*.hs`.
 Currently you can install reley compiler with `python setup.py install`.
 
 Usage
