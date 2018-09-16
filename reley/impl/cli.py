@@ -1,8 +1,6 @@
-from .compiler import Ctx
-from .pycompat import find_reley_module_spec
+from .pycompat import sys
+from .reley_import import get_reley_module_spec_from_path, get_context_from_spec
 from wisepy.talking import Talking
-from bytecode import Bytecode
-from rbnf.edsl.rbnf_analyze import check_parsing_complete
 from Redy.Tools.PathLib import Path
 from importlib._bootstrap_external import MAGIC_NUMBER
 import marshal
@@ -16,7 +14,8 @@ def cc(f: 'input filename', o: 'output filename'):
     """
     compile reley source code into pyc files
     """
-    code = find_reley_module_spec(f)
+    spec = get_reley_module_spec_from_path('main', f)
+    code = get_context_from_spec(spec).bc.to_code()
     timestamp = struct.pack('i', int(time.time()))
     marshalled_code_object = marshal.dumps(code)
     with Path(o).open('wb') as f:
@@ -27,11 +26,12 @@ def cc(f: 'input filename', o: 'output filename'):
 
 
 @talking
-def run(f: 'input filename', o: 'output filename'):
+def run(f: 'input filename'):
     """
     compile reley source code into pyc files
     """
-    code = filename_to_bc(f)
+    spec = get_reley_module_spec_from_path('main', f)
+    code = get_context_from_spec(spec).bc.to_code()
     exec(code)
 
 

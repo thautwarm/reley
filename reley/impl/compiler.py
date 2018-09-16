@@ -369,7 +369,6 @@ def _(ast: Suite, ctx: Ctx):
 
 @visit.case(Module)
 def _(ast: Module, ctx: Ctx):
-
     cos = list(ctx.visit(ast.stmts))
     start(cos)
     reach(DECLARED, cos)
@@ -378,6 +377,7 @@ def _(ast: Module, ctx: Ctx):
     reach(END, cos)
 
     exports = ast.exports
+
     if exports:
         for each in exports:
             ctx.load_name(each)

@@ -27,7 +27,7 @@ setup(
     author='thautwarm',
     author_email='twshere@outlook.com',
     packages=['reley', 'reley.impl'],
-    entry_points={'console_scripts': ['reley=reley.cli:main']},
+    entry_points={'console_scripts': ['reley=reley.impl.cli:main']},
     package_data={'reley': ['impl/grammar.rbnf', '*.hs']},
     install_requires=['Redy', 'rbnf>=0.3.21', 'wisepy', 'bytecode==0.7.0'],
     platforms='any',

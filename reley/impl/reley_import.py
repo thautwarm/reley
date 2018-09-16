@@ -47,7 +47,6 @@ def _(imp: Import, ctx: Ctx):
             lineno=imp.lineno + 1))
     ctx.bc.append(
         Instr("IMPORT_NAME", arg=imp.imp_name, lineno=imp.lineno + 1))
-
     if stuffs:
         for each in stuffs:
             ctx.bc.append(
@@ -168,6 +167,7 @@ class ReleyLoader:
         setattr(module, '__loader__', self)
         code: Bytecode = module.__spec__.context.bc
         code.filename = str(self.mod_path)
+
         exec(code.to_code(), module.__dict__)
 
 
