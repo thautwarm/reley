@@ -75,8 +75,7 @@ factor ::= [neg='-'] call=call -> Call(loc @ neg, Symbol(loc@neg, "neg"), call) 
 call ::= leader=atom tail=(atom{is_indented})*
          ->  reduce(lambda a, b: Call(loc @ a, a, b), tail, leader)
 
-atom ::= | '{|' as mark expr_stmts '|}'
-         | SYMBOL=identifier
+atom ::= | SYMBOL=identifier
          | IF='if' cond=expr 'then' iftrue=expr_stmts 'else' iffalse=expr_stmts
          | LET='let' stmts=stmts 'in' out=expr_stmts
          | RET='return' [expr=expr_stmts]

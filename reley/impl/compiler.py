@@ -69,6 +69,7 @@ class Ctx:
     bc: Bytecode
     precedences: Dict[str, int]
     is_nested: bool
+    exported: list
 
     def __init__(self, symtb, local, bc, precedences, is_nested):
         self.symtb = symtb
@@ -76,6 +77,7 @@ class Ctx:
         self.bc = bc
         self.precedences = precedences
         self.is_nested = is_nested
+        self.exported = []
 
     def new(self) -> 'Ctx':
         return Ctx(self.symtb, {}, Bytecode(), self.precedences, True)
@@ -381,6 +383,7 @@ def _(ast: Module, ctx: Ctx):
             ctx.load_name(each)
             ctx.bc.append(
                 Instr("STORE_GLOBAL", arg=each.name, lineno=each.lineno + 1))
+            ctx.exported.append(each.name)
 
     if ctx.local.get('main'):
         ctx.bc.append(Instr('LOAD_FAST', arg='main'))
@@ -438,56 +441,6 @@ def _(lst: HList, ctx: Ctx):
     ctx.bc.append(Instr("LOAD_CONST", arg=(), lineno=lst.lineno))
     for _ in range(len(seq)):
         ctx.bc.append(Instr("BUILD_TUPLE", arg=2, lineno=lst.lineno))
-
-
-@visit.case(Import)
-def _(imp: Import, ctx: Ctx):
-
-    if imp.name:
-        ctx.add_local(imp.name, Val())
-    if imp.stuffs:
-        for each in imp.stuffs:
-            ctx.add_local(each.name, Val())
-
-    yield from wait(DECLARED)
-    yield from wait(EVALUATED)
-    yield from wait(RESOLVED)
-    ctx.bc.append(Instr("LOAD_CONST", arg=0, lineno=imp.lineno + 1))
-    ctx.bc.append(
-        Instr(
-            "LOAD_CONST",
-            tuple(each.name for each in imp.stuffs) if imp.stuffs else
-            ('*', ) if imp.stuffs is 0 else 0,
-            lineno=imp.lineno + 1))
-    ctx.bc.append(
-        Instr("IMPORT_NAME", arg=imp.imp_name, lineno=imp.lineno + 1))
-
-    if imp.stuffs:
-        for each in imp.stuffs:
-            ctx.bc.append(
-                Instr(
-                    "IMPORT_FROM", arg=each.imp_name, lineno=each.lineno + 1))
-            name = each.name
-            if name in ctx.bc.cellvars:
-                ctx.bc.append(
-                    Instr(
-                        "STORE_DEREF", CellVar(name), lineno=each.lineno + 1))
-            else:
-                ctx.bc.append(
-                    Instr('STORE_FAST', name, lineno=each.lineno + 1))
-    elif imp.stuffs is 0:
-        ctx.bc.append(Instr("IMPORT_STAR", lineno=imp.lineno + 1))
-
-    if imp.stuffs is not 0:
-        name = imp.name
-        if not name:
-            ctx.bc.append(Instr("POP_TOP", lineno=imp.lineno + 1))
-            return
-        if name in ctx.bc.cellvars:
-            ctx.bc.append(
-                Instr("STORE_DEREF", CellVar(name), lineno=imp.lineno + 1))
-        else:
-            ctx.bc.append(Instr('STORE_FAST', name, lineno=imp.lineno + 1))
 
 
 @visit.case(Where)

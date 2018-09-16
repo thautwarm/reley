@@ -1,7 +1,7 @@
 import std.common.[Space Name DoubleQuotedStr]
 ignore [Space comment]
-[python] import reley.expr_based_ast.[*]
-[python] import reley.helper.[*]
+[python] import reley.impl.expr_based_ast.[*]
+[python] import reley.impl.helper.[*]
 [python] import functools.[*]
 
 
@@ -43,15 +43,17 @@ arg   ::= name=Name [':' ty=ty] -> Arg(loc @ name, name.value, ty)
 ty    ::= it=expr -> it
 
 
-alias_pair ::= imp_name=identifier ['as' name=identifier] -> Alias(loc @ imp_name, imp_name.value, name.value if name else imp_name.value)
+alias_pair ::= imp_name=identifier ['as' name=identifier] -> Alias(loc @ imp_name, imp_name.name, name.name if name else imp_name.name)
 
 dot_lst ::= head=alias_pair tail=(',' alias_pair)* -> (head, *tail[1::2])
 
-import_ ::= mark='import' names=(Name ('.' Name)*) ['as' name=Name] ['(' lst=dot_lst ')']
+
+wildcard ::= '*' -> 0
+import_ ::= mark='import' names=(Name ('.' Name)*) ['as' name=Name] ['(' (lst=dot_lst | star=wildcard)')']
            -> imp_name = ''.join(map(lambda _: _.value, names))
               name = name.value if name else None
               if not lst and not name: name = imp_name
-              Import(loc @ mark, imp_name, name, lst)
+              Import(loc @ mark, imp_name, name, lst or star)
 
 infix ::= mark='infix' precedence=num op=identifier -> Infix(loc @ mark, eval(precedence.value), op.name)
 
@@ -71,8 +73,7 @@ factor ::= [neg='-'] call=call -> Call(loc @ neg, Symbol(loc@neg, "neg"), call) 
 call ::= leader=atom tail=(atom{is_indented})*
          ->  reduce(lambda a, b: Call(loc @ a, a, b), tail, leader)
 
-atom ::= | '{|' as mark expr_stmts '|}'
-         | SYMBOL=identifier
+atom ::= | SYMBOL=identifier
          | IF='if' cond=expr 'then' iftrue=expr_stmts 'else' iffalse=expr_stmts
          | LET='let' stmts=stmts 'in' out=expr_stmts
          | RET='return' [expr=expr_stmts]
@@ -88,7 +89,6 @@ tuple ::= '(' as mark [head=expr tail=(',' expr)*] ')'
                 head.loc.update(*(loc @ mark))
                 return head
              Void(loc@mark)
-
 list  ::= '[' as mark  [head=expr tail=(',' expr)*] ']' -> HList(loc @ mark, (head, *tail[1::2]) if head else ())
 
 set   ::= '{' as mark head=expr tail=(',' expr)* '}' -> HDict(loc @ mark, make_set(head, *tail[1::2]))

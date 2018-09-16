@@ -9,9 +9,9 @@ install:
   - python setup.py install
 
 script:
-  - coverage run --m tests
+  - coverage run sample_test.py
   # exclude bootstrap for ast transformations cannot be detected by coverage, causing incorrect report.
-  - coverage report --omit=.\rbnf\bootstrap\rbnf.py
+  - coverage report
 
 after_success:
   - codecov

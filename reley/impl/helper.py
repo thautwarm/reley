@@ -1,5 +1,4 @@
 from rbnf.std.common import recover_codes
-
 from .expr_based_ast import *
 
 
@@ -27,7 +26,10 @@ def atom_rewrite(get):
     suite_, num_, strs_, symbol_, if_, let_, ret_, yield_, lit_ = map(
         get, ('SUITE', 'NUM', 'STRS', 'SYMBOL', 'IF', 'LET', 'RET', 'YIELD',
               'LITERAL'))
-    if suite_: return suite_
+    if suite_:
+        mark = get('mark')
+        suite_.loc.update(loc @ mark)
+        return suite_
     if num_: return Number(loc @ num_, eval(num_.value))
     if strs_: return Str(loc @ strs_[0], ''.join(eval(_.value) for _ in strs_))
     if symbol_: return Symbol(loc @ symbol_, symbol_.name)
@@ -40,6 +42,7 @@ def atom_rewrite(get):
 
 
 def bin_op_rewrite(get):
+
     basic, names, seq = map(get, ('basic', 'names', 'seq'))
     if basic:
         return Operator(loc @ basic, basic.value)

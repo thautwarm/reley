@@ -19,7 +19,7 @@ class Loc:
 
     def __matmul__(self, other):
         if isinstance(other, Tokenizer):
-            return Loc(other.lineno, other.colno, self.filename)
+            return Loc(other.lineno, other.colno, getattr(other, 'filename') or '<unknown>')
         return Loc(*other.loc)
 
     def __iter__(self):

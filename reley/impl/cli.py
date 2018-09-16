@@ -1,5 +1,5 @@
 from .compiler import Ctx
-from .pycompat import get_parse_fn, filename_to_bc
+from .pycompat import find_reley_module_spec
 from wisepy.talking import Talking
 from bytecode import Bytecode
 from rbnf.edsl.rbnf_analyze import check_parsing_complete
@@ -16,7 +16,7 @@ def cc(f: 'input filename', o: 'output filename'):
     """
     compile reley source code into pyc files
     """
-    code = filename_to_bc(f)
+    code = find_reley_module_spec(f)
     timestamp = struct.pack('i', int(time.time()))
     marshalled_code_object = marshal.dumps(code)
     with Path(o).open('wb') as f:
