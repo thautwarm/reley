@@ -1,5 +1,5 @@
 module
-    m_sum
+    m_sum, (==) -- export `m_sum` and  `(==)`
 where
 
 import operator (add, eq)

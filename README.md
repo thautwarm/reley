@@ -22,6 +22,10 @@ Usage
 If you have a reley source file `haskell_test/sum_n.hs`:
 
 ```haskell
+module
+    m_sum, (==) -- export `m_sum` and  `(==)`
+where
+
 import operator (add, eq)
 import functools (reduce)
 import toolz (curry)
@@ -41,6 +45,7 @@ m_sum lst = if lst == [] then 0
 
 main () =
     print $ m_sum [1, 2, 3, 4, 5, 6]
+
 ```
 
 Then you can import it in Python
