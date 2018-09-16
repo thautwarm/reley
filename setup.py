@@ -29,7 +29,7 @@ setup(
     packages=['reley', 'reley.impl'],
     entry_points={'console_scripts': ['reley=reley.impl.cli:main']},
     package_data={'reley': ['impl/grammar.rbnf', '*.hs']},
-    install_requires=['Redy', 'rbnf>=0.3.21', 'wisepy', 'bytecode==0.7.0'],
+    install_requires=['Redy', 'rbnf>=0.3.21', 'wisepy', 'bytecode==0.7.0', 'toolz'],
     platforms='any',
     classifiers=[
         'Programming Language :: Python :: 3.6',
